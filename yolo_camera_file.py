@@ -2,10 +2,11 @@ import cv2
 from ultralytics import YOLO
 from IPython.display import Video
 
-model = YOLO('yolov8n-cls.pt')
+# Load detection model (IMPORTANT CHANGE)
+model = YOLO('yolov8n.pt')
 
-VIDEO_PATH = "/content/drive/MyDrive/Edge_AI/Cars.mp4"  # change if needed
-OUTPUT_PATH = "/content/output_cls.mp4"
+VIDEO_PATH = "/content/drive/MyDrive/Edge_AI/Cars.mp4"
+OUTPUT_PATH = "/content/output_video.mp4"
 
 cap = cv2.VideoCapture(VIDEO_PATH)
 assert cap.isOpened(), "Error reading video file"
@@ -13,11 +14,9 @@ assert cap.isOpened(), "Error reading video file"
 w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 fps = cap.get(cv2.CAP_PROP_FPS)
-
 if fps <= 0:
     fps = 25.0
 
-# Output writer
 out = cv2.VideoWriter(
     OUTPUT_PATH,
     cv2.VideoWriter_fourcc(*"mp4v"),
@@ -30,27 +29,39 @@ while cap.isOpened():
     if not success:
         break
 
+    # Run detection
     results = model(frame)
 
-    probs = results[0].probs
-    top1 = probs.top1
-    class_name = model.names[top1]
-    confidence = probs.top1conf.item()
+    if results[0].boxes is not None:
+        boxes = results[0].boxes
 
-    label = f"{class_name}: {confidence:.2f}"
-    cv2.putText(
-        frame,
-        label,
-        (20, 40),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        1,
-        (0, 255, 0),
-        2
-    )
-  
+        xyxy = boxes.xyxy.cpu().numpy()
+        cls_ids = boxes.cls.cpu().numpy().astype(int)
+        confs = boxes.conf.cpu().numpy()
+
+        for box, cls_id, conf in zip(xyxy, cls_ids, confs):
+            x1, y1, x2, y2 = map(int, box)
+
+            class_name = model.names[cls_id]
+            label = f"{class_name} {conf:.2f}"
+
+            # Draw rectangle
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+            # Draw label
+            cv2.putText(
+                frame,
+                label,
+                (x1, y1 - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 255),
+                2
+            )
+
     out.write(frame)
 
 cap.release()
 out.release()
 
-print("Processing complete!")
+print("Done!")
